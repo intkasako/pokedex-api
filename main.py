@@ -1,4 +1,3 @@
-from multiprocessing.dummy import connection
 
 from fastapi import FastAPI
 from database import get_connection
@@ -19,7 +18,7 @@ def list_pokemon(type: str | None = None, generation: int | None = None):
     sql = ""
     if type:
         conditions.append("t1.name_ = ?")
-        params.append(type)
+        params.append(type.capitalize())
 
     if generation:
         conditions.append("p.generation = ?")
@@ -45,14 +44,14 @@ def add_pokemon(pokemon: PokemonCreate):
     row =connection.execute("""
         SELECT type_id
         FROM types
-        WHERE name_ = ?""", (pokemon.type_primary,)).fetchone()
+        WHERE name_ = ?""", (pokemon.type_primary.capitalize(),)).fetchone()
     type_primary_id = row["type_id"]
     if pokemon.type_secondary:
         row = connection.execute("""
             SELECT type_id
             FROM types
             WHERE name_ = ?""",
-            (pokemon.type_secondary,)).fetchone()
+            (pokemon.type_secondary.capitalize(),)).fetchone()
         type_secondary_id = row["type_id"]
     else:
         type_secondary_id = None
@@ -81,13 +80,13 @@ def update_pokemon(id : int, pokemon : PokemonCreate):
     row = connection.execute("""
         SELECT type_id
         FROM types
-        WHERE name_ = ?""", (pokemon.type_primary,)).fetchone()
+        WHERE name_ = ?""", (pokemon.type_primary.capitalize(),)).fetchone()
     type_primary_id = row["type_id"]
     if pokemon.type_secondary:
         row = connection.execute("""
             SELECT type_id
             FROM types
-            WHERE name_ = ?""", (pokemon.type_secondary,)).fetchone()
+            WHERE name_ = ?""", (pokemon.type_secondary.capitalize(),)).fetchone()
         type_secondary_id = row["type_id"]
     else:
         type_secondary_id = None
