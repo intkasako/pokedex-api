@@ -1,5 +1,4 @@
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from database import get_connection
 from pydantic import BaseModel
 app = FastAPI()
@@ -41,10 +40,13 @@ def list_pokemon(type: str | None = None, generation: int | None = None):
 @app.post("/pokemon")
 def add_pokemon(pokemon: PokemonCreate):
     connection = get_connection()
-    row =connection.execute("""
+    row = connection.execute("""
         SELECT type_id
         FROM types
         WHERE name_ = ?""", (pokemon.type_primary.capitalize(),)).fetchone()
+    if not row:
+        connection.close()
+        raise HTTPException(status_code=404, detail="Primary type not found")
     type_primary_id = row["type_id"]
     if pokemon.type_secondary:
         row = connection.execute("""
@@ -52,15 +54,25 @@ def add_pokemon(pokemon: PokemonCreate):
             FROM types
             WHERE name_ = ?""",
             (pokemon.type_secondary.capitalize(),)).fetchone()
+        if not row:
+            connection.close()
+            raise HTTPException(status_code=404, detail="Secondary type not found")
         type_secondary_id = row["type_id"]
     else:
         type_secondary_id = None
-    connection.execute("""
+    cursor = connection.execute("""
         INSERT INTO pokemon(name_, type_primary_id, type_secondary_id, generation)
-        VALUES (?, ?, ?, ?)""", 
+        VALUES (?, ?, ?, ?)""",
         (pokemon.name_, type_primary_id, type_secondary_id, pokemon.generation))
     connection.commit()
+    row = connection.execute("""
+        SELECT p.pokemon_id, p.name_, t1.name_ AS type_primary, t2.name_ AS type_secondary, p.generation
+        FROM pokemon p
+        JOIN types t1 ON p.type_primary_id = t1.type_id
+        LEFT JOIN types t2 ON p.type_secondary_id = t2.type_id
+        WHERE p.pokemon_id = ?""", (cursor.lastrowid,)).fetchone()
     connection.close()
+    return dict(row)
 
 @app.get("/pokemon/{key}")
 def search_pokemon(key : int):
@@ -73,35 +85,51 @@ def search_pokemon(key : int):
             WHERE p.pokemon_id = ?""", (key,)).fetchone()
     connection.close()
     return dict(row) if row else {"error": "Pokemon not found"}
-        
+
 @app.put("/pokemon/{id}")
 def update_pokemon(id : int, pokemon : PokemonCreate):
-    connection =get_connection()
+    connection = get_connection()
     row = connection.execute("""
         SELECT type_id
         FROM types
         WHERE name_ = ?""", (pokemon.type_primary.capitalize(),)).fetchone()
+    if not row:
+        connection.close()
+        raise HTTPException(status_code=404, detail="Primary type not found")
     type_primary_id = row["type_id"]
     if pokemon.type_secondary:
         row = connection.execute("""
             SELECT type_id
             FROM types
             WHERE name_ = ?""", (pokemon.type_secondary.capitalize(),)).fetchone()
+        if not row:
+            connection.close()
+            raise HTTPException(status_code=404, detail="Secondary type not found")
         type_secondary_id = row["type_id"]
     else:
         type_secondary_id = None
-    connection.execute("""
+    cursor = connection.execute("""
         UPDATE pokemon
         SET name_ = ?, type_primary_id = ?, type_secondary_id = ?, generation = ?
         WHERE pokemon_id = ?""", (pokemon.name_, type_primary_id, type_secondary_id, pokemon.generation, id))
     connection.commit()
+    if cursor.rowcount == 0:
+        connection.close()
+        raise HTTPException(status_code=404, detail="Pokemon not found")
+    row = connection.execute("""
+        SELECT p.pokemon_id, p.name_, t1.name_ AS type_primary, t2.name_ AS type_secondary, p.generation
+        FROM pokemon p
+        JOIN types t1 ON p.type_primary_id = t1.type_id
+        LEFT JOIN types t2 ON p.type_secondary_id = t2.type_id
+        WHERE p.pokemon_id = ?""", (id,)).fetchone()
     connection.close()
+    return dict(row)
 
 @app.delete("/pokemon/{id}")
 def delete_pokemon(id : int):
     connection = get_connection()
     connection.execute("""
-        DELETE FROM pokemon 
+        DELETE FROM pokemon
         WHERE pokemon_id = ?""", (id,))
     connection.commit()
     connection.close()
