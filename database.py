@@ -10,3 +10,7 @@ def get_connection():
     connection = sqlite3.connect("pokedex.db")
     connection.row_factory = sqlite3.Row
     return connection
+
+if __name__ == "__main__":
+    init_db()
+    print("Sucessfully initialized the database and seeded it with data.")

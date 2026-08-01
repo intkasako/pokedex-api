@@ -12,14 +12,29 @@ class PokemonCreate(BaseModel):
     generation : int
 
 @app.get("/pokemon")
-def list_pokemon():
+def list_pokemon(type: str | None = None, generation: int | None = None):
+
+    conditions = []
+    params = []
+    sql = ""
+    if type:
+        conditions.append("t1.name_ = ?")
+        params.append(type)
+
+    if generation:
+        conditions.append("p.generation = ?")
+        params.append(generation)
+
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+
     connection = get_connection()
     pokemons = connection.execute("""
         SELECT p.pokemon_id, p.name_, t1.name_ AS type_primary, t2.name_ AS type_secondary, p.generation
         FROM pokemon p
         JOIN types t1 ON p.type_primary_id = t1.type_id
-        LEFT JOIN types t2 ON p.type_secondary_id = t2.type_id;
-        """
+        LEFT JOIN types t2 ON p.type_secondary_id = t2.type_id
+        """ + sql, tuple(params)
     ).fetchall()
     connection.close()
     return [dict(row) for row in pokemons]
